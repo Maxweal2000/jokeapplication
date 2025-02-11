@@ -1,80 +1,78 @@
-import React, { useState } from "react";
-import SignIn from "./SignIn";
-import SignUp from "./SignUp"; // The initial sign-up page
-import { adminCredentials, verifyAdmin } from "./admin"; // Importing the admin credentials and verification function
+import React, { useState, useEffect } from "react";
 import "./styles.css"; // Add your styles
 
-const defaultAdminJokes = [
-  {
-    question: "Why don’t skeletons fight each other?",
-    answer: "Because they don’t have the guts!",
-    username: "admin",
-  },
-  {
-    question: "Why did the scarecrow win an award?",
-    answer: "Because he was outstanding in his field!",
-    username: "admin",
-  },
-  {
-    question: "Why couldn’t the bicycle stand up by itself?",
-    answer: "It was two-tired!",
-    username: "admin",
-  },
-  {
-    question: "What do you call fake spaghetti?",
-    answer: "An impasta!",
-    username: "admin",
-  },
-];
-
 const App = () => {
-  const [user, setUser] = useState(null); // Logged-in user
-  const [isAdmin, setIsAdmin] = useState(false); // To track if the logged-in user is an admin
-  const [isSignUp, setIsSignUp] = useState(false); // To toggle between Sign-Up and Sign-In
-  const [userCredentials, setUserCredentials] = useState({
-    username: "",
-    password: "",
-  }); // For sign-in credentials
-  const [adminJokes, setAdminJokes] = useState(defaultAdminJokes); // Admin's jokes
-  const [userJokes, setUserJokes] = useState([]); // User's jokes (created by the user)
+  const [user, setUser] = useState("user1"); // Default logged-in user
+  const [userJokes, setUserJokes] = useState(() => {
+    // Retrieve user jokes from localStorage on initial load
+    const savedJokes = localStorage.getItem("userJokes");
+    return savedJokes ? JSON.parse(savedJokes) : [];
+  });
   const [currentIndex, setCurrentIndex] = useState(0); // Current joke index
   const [showAnswer, setShowAnswer] = useState(false); // To toggle showing the answer
   const [newJoke, setNewJoke] = useState({ question: "", answer: "" }); // For creating new jokes
   const [isCreating, setIsCreating] = useState(false); // To track if the user is creating a new joke
 
-  const handleSignUp = (username) => {
-    setUser(username); // Set the logged-in user to the username
-    setIsSignUp(false); // Switch to flashcard view
-  };
+  // Geolocation State
+  const [location, setLocation] = useState(null); // Store the user's location
+  const [error, setError] = useState(null); // Store any error from Geolocation API
 
-  const handleSignIn = () => {
-    // Check if the credentials match using verifyAdmin function
-    if (verifyAdmin(userCredentials.username, userCredentials.password)) {
-      setIsAdmin(true); // Set the user as admin
-      setUser(userCredentials.username); // Set the logged-in user to the username
-    } else {
-      setIsAdmin(false); // Ensure non-admin users don't have admin rights
-      setUser(userCredentials.username); // Set the logged-in user to a regular user
+  // Camera State
+  const [image, setImage] = useState(null); // Store the image captured from the camera
+
+  // Update localStorage whenever the user jokes change
+  useEffect(() => {
+    if (userJokes.length > 0) {
+      localStorage.setItem("userJokes", JSON.stringify(userJokes));
     }
-    setIsSignUp(false); // Switch to flashcard view after sign-in
-  };
+  }, [userJokes]);
 
-  const handleSwitchToSignUp = () => {
-    setIsSignUp(true); // Switch to the sign-up page
-  };
+  // Get User's Location using Geolocation API
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setLocation({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          });
+        },
+        (err) => {
+          setError("Unable to retrieve your location.");
+        }
+      );
+    } else {
+      setError("Geolocation is not supported by this browser.");
+    }
+  }, []);
 
-  const handleSwitchToSignIn = () => {
-    setIsSignUp(false); // Switch to the sign-in page
-  };
+  // Function to handle image capture from camera
+  const handleCaptureImage = () => {
+    const video = document.createElement("video");
+    const canvas = document.createElement("canvas");
+    const videoConstraints = { video: { facingMode: "user" } };
 
-  const handleSignOut = () => {
-    setUser(null); // Reset user state to log out
-    setIsAdmin(false); // Reset admin status
+    navigator.mediaDevices
+      .getUserMedia(videoConstraints)
+      .then((stream) => {
+        video.srcObject = stream;
+        video.play();
+      })
+      .catch((err) => console.log("Camera access denied:", err));
+
+    // Capture the image once the video is ready
+    video.onloadeddata = () => {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext("2d").drawImage(video, 0, 0);
+      setImage(canvas.toDataURL("image/png")); // Store captured image
+      video.srcObject.getTracks().forEach((track) => track.stop()); // Stop the video stream after capture
+    };
   };
 
   const nextCard = () => {
     setShowAnswer(false);
-    setCurrentIndex((prevIndex) => (prevIndex + 1) % adminJokes.length);
+    setCurrentIndex((prevIndex) => (prevIndex + 1) % userJokes.length);
   };
 
   const toggleAnswer = () => {
@@ -91,69 +89,41 @@ const App = () => {
       setUserJokes([...userJokes, newJokeWithUser]);
       setNewJoke({ question: "", answer: "" });
       setIsCreating(false);
+      setCurrentIndex(userJokes.length); // Set the current index to the last added joke
     }
   };
 
   const handleDeleteJoke = (index) => {
-    const jokeToDelete = userJokes[index];
-
-    if (jokeToDelete.username === user || isAdmin) {
-      const updatedUserJokes = userJokes.filter(
-        (_, jokeIndex) => jokeIndex !== index
-      );
-      setUserJokes(updatedUserJokes);
-      if (index === currentIndex) {
-        setCurrentIndex(
-          (prevIndex) => (prevIndex + 1) % updatedUserJokes.length
-        );
-      }
-    } else {
-      alert("You can only delete your own jokes!");
+    const updatedUserJokes = userJokes.filter(
+      (_, jokeIndex) => jokeIndex !== index
+    );
+    setUserJokes(updatedUserJokes);
+    if (index === currentIndex) {
+      setCurrentIndex((prevIndex) => (prevIndex + 1) % updatedUserJokes.length);
     }
   };
 
-  const handleAdminDeleteJoke = (index) => {
-    const updatedAdminJokes = adminJokes.filter(
-      (_, jokeIndex) => jokeIndex !== index
-    );
-    setAdminJokes(updatedAdminJokes);
-  };
-
-  // Show either the SignUp, SignIn, or Flashcard view based on the current state
-  if (user === null) {
-    return isSignUp ? (
-      <SignUp onSignUp={handleSignUp} onSwitchToSignIn={handleSwitchToSignIn} />
-    ) : (
-      <SignIn
-        onSignIn={handleSignIn}
-        userCredentials={userCredentials}
-        setUserCredentials={setUserCredentials}
-        onSwitchToSignUp={handleSwitchToSignUp}
-      />
-    );
-  }
-
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
-      <h2 className="text-2xl font-semibold mb-4">
-        {isAdmin ? "Welcome Admin!" : `Welcome, ${user}!`}
-      </h2>
+      <h2 className="text-2xl font-semibold mb-4">Welcome, {user}!</h2>
 
-      {/* Display joke from Admin or User */}
-      {adminJokes.length > 0 &&
-      currentIndex >= 0 &&
-      currentIndex < adminJokes.length ? (
-        <div className="w-80 bg-white shadow-lg rounded-2xl p-6 text-center cursor-pointer">
+      {/* Display User-created Jokes */}
+      {userJokes.length > 0 && (
+        <div className="w-80 bg-white shadow-lg rounded-2xl p-6 text-center">
           <h2 className="text-xl font-semibold text-gray-800">
             {showAnswer
-              ? adminJokes[currentIndex].answer
-              : adminJokes[currentIndex].question}
+              ? userJokes[currentIndex].answer
+              : userJokes[currentIndex].question}
           </h2>
         </div>
-      ) : (
-        <div>No jokes available</div>
       )}
 
+      {/* Display message if no jokes available */}
+      {userJokes.length === 0 && (
+        <div>No jokes available. Create your first joke!</div>
+      )}
+
+      {/* Buttons for next joke and show/hide answer */}
       <div className="mt-4 flex gap-4">
         <button
           className="px-6 py-2 bg-blue-500 text-white rounded-lg shadow-md hover:bg-blue-600"
@@ -204,32 +174,12 @@ const App = () => {
         </div>
       )}
 
-      {/* Admin's Jokes */}
-      <div className="mt-4 w-80 bg-white shadow-lg rounded-2xl p-6">
-        <h3 className="text-lg font-semibold mb-4">Admin's Jokes</h3>
-        <ul>
-          {adminJokes.map((joke, index) => (
-            <li key={index} className="flex justify-between items-center mb-2">
-              <span>{joke.question}</span>
-              {isAdmin && (
-                <button
-                  className="ml-4 text-red-500 hover:text-red-700"
-                  onClick={() => handleAdminDeleteJoke(index)}
-                >
-                  Delete
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      {/* Your Jokes (User-created jokes) */}
-      <div className="mt-4 w-80 bg-white shadow-lg rounded-2xl p-6">
-        <h3 className="text-lg font-semibold mb-4">Your Jokes</h3>
-        <ul>
-          {userJokes.length > 0 ? (
-            userJokes.map((joke, index) => (
+      {/* Display User's Jokes */}
+      {userJokes.length > 0 && (
+        <div className="mt-4 w-80 bg-white shadow-lg rounded-2xl p-6">
+          <h3 className="text-lg font-semibold mb-4">Your Jokes</h3>
+          <ul>
+            {userJokes.map((joke, index) => (
               <li
                 key={index}
                 className="flex justify-between items-center mb-2"
@@ -242,21 +192,44 @@ const App = () => {
                   Delete
                 </button>
               </li>
-            ))
-          ) : (
-            <li className="text-gray-500">
-              You haven't created any jokes yet.
-            </li>
-          )}
-        </ul>
-      </div>
+            ))}
+          </ul>
+        </div>
+      )}
 
-      {/* Sign Out Button */}
+      {/* Display User's Location */}
+      {location && (
+        <div className="mt-4 bg-white shadow-lg rounded-2xl p-6 text-center">
+          <h3 className="text-lg font-semibold mb-4">Your Location</h3>
+          <p>Latitude: {location.latitude}</p>
+          <p>Longitude: {location.longitude}</p>
+        </div>
+      )}
+
+      {error && (
+        <div className="mt-4 bg-red-500 text-white rounded-2xl p-6 text-center">
+          <p>{error}</p>
+        </div>
+      )}
+
+      {/* Display Captured Image */}
+      {image && (
+        <div className="mt-4 bg-white shadow-lg rounded-2xl p-6 text-center">
+          <h3 className="text-lg font-semibold mb-4">Captured Image</h3>
+          <img
+            src={image}
+            alt="Captured"
+            className="w-64 h-64 object-cover rounded-full"
+          />
+        </div>
+      )}
+
+      {/* Button to capture image */}
       <button
-        className="mt-4 px-6 py-2 bg-red-500 text-white rounded-lg shadow-md hover:bg-red-600"
-        onClick={handleSignOut}
+        className="mt-4 px-6 py-2 bg-purple-500 text-white rounded-lg shadow-md hover:bg-purple-600"
+        onClick={handleCaptureImage}
       >
-        Sign Out
+        Capture Image
       </button>
     </div>
   );
