@@ -18,3 +18,11 @@ A fun React-based web app that, allows users to add their own, and includes inte
    ```bash
    git clone https://github.com/yourusername/joke-generator.git
    cd joke-generator
+
+Install dependencies:
+npm install
+
+Start the project:
+npm run dev
+
+Open the app in the browser (URL displayed in terminal).
